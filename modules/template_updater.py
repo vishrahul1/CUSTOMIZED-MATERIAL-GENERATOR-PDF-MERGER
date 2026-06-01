@@ -1,8 +1,8 @@
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm
-from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+import os
+
+from docx2pdf import convert
+
+from spectropy_index import generate_index
 
 
 class TemplateUpdater:
@@ -10,57 +10,47 @@ class TemplateUpdater:
         pass  # template_path kept for API compatibility but no longer used
 
     def generate_index_pdf(self, index_data, output_pdf_path):
-        doc = SimpleDocTemplate(
-            output_pdf_path,
-            pagesize=A4,
-            rightMargin=20 * mm,
-            leftMargin=20 * mm,
-            topMargin=20 * mm,
-            bottomMargin=20 * mm,
-        )
+        """
+        Build the SPECTROPY "TABLE OF CONTENTS" index using spectropy_index.py
+        and convert it to PDF.
 
-        styles = getSampleStyleSheet()
-        story = []
+        index_data is the list of dicts produced by
+        PDFMerger.merge_pdfs_with_index_tracking:
+            {'chapter_name', 'topic_name', 'page_number'}
 
-        title_style = ParagraphStyle(
-            'IndexTitle',
-            parent=styles['Title'],
-            fontSize=20,
-            spaceAfter=8 * mm,
-            textColor=colors.HexColor('#2c3e50'),
-        )
-        story.append(Paragraph("TABLE OF CONTENTS", title_style))
-        story.append(Spacer(1, 4 * mm))
-
-        col_widths = [55 * mm, 95 * mm, 20 * mm]
-        data = [['Chapter', 'Topic', 'Page']]
-        for entry in index_data:
-            data.append([
+        spectropy_index.generate_index expects a list of tuples:
+            (chapter_name, topic_text, page_number)
+        so we just reshape the input here — spectropy_index.py is untouched.
+        """
+        # ---- reshape input: list of dicts -> list of tuples ----
+        data = [
+            (
                 str(entry['chapter_name']),
                 str(entry['topic_name']),
-                str(entry['page_number']),
-            ])
+                entry['page_number'],
+            )
+            for entry in index_data
+        ]
 
-        tbl = Table(data, colWidths=col_widths, repeatRows=1)
-        tbl.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, 0),  colors.HexColor('#2c3e50')),
-            ('TEXTCOLOR',     (0, 0), (-1, 0),  colors.white),
-            ('FONTNAME',      (0, 0), (-1, 0),  'Helvetica-Bold'),
-            ('FONTSIZE',      (0, 0), (-1, 0),  11),
-            ('TOPPADDING',    (0, 0), (-1, 0),  8),
-            ('BOTTOMPADDING', (0, 0), (-1, 0),  8),
-            ('FONTNAME',      (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE',      (0, 1), (-1, -1), 9),
-            ('TOPPADDING',    (0, 1), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
-            ('ALIGN',         (2, 0), (2, -1),  'CENTER'),
-            ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
-            ('ROWBACKGROUNDS',(0, 1), (-1, -1),
-             [colors.white, colors.HexColor('#f0f2f5')]),
-            ('GRID',          (0, 0), (-1, -1), 0.5, colors.HexColor('#bdc3c7')),
-            ('LINEBELOW',     (0, 0), (-1, 0),  1.5, colors.HexColor('#2c3e50')),
-        ]))
-        story.append(tbl)
+        # ---- generate the .docx next to the target .pdf ----
+        docx_path = os.path.splitext(output_pdf_path)[0] + ".docx"
+        generate_index(data, docx_path)
+        print(f"[TemplateUpdater] Generated index DOCX at {docx_path}")
 
-        doc.build(story)
+        # ---- convert .docx -> .pdf (Word COM via docx2pdf) ----
+        # The GUI runs the pipeline in a daemon thread; Word COM needs the
+        # thread's COM apartment initialized before use.
+        try:
+            import pythoncom
+            pythoncom.CoInitialize()
+            _com_inited = True
+        except Exception:
+            _com_inited = False
+
+        try:
+            convert(docx_path, output_pdf_path)
+        finally:
+            if _com_inited:
+                pythoncom.CoUninitialize()
+
         print(f"[TemplateUpdater] Generated index PDF at {output_pdf_path}")
