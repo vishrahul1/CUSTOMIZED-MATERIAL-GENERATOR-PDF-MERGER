@@ -81,3 +81,44 @@ class PDFMerger:
             writer.write(f_out)
 
         print(f"[PDFMerger] Header/footer added → {output_pdf_path}")
+
+    def insert_chapter_title_pages(self, content_pdf_path, titles_pdf_path,
+                                   chapter_start_pages, output_path):
+        """
+        Insert chapter divider pages into an already-merged (and header/footer'd)
+        content PDF, placing each divider immediately before its chapter's first
+        content page.
+
+        Parameters
+        ----------
+        content_pdf_path    : the merged content PDF (post header/footer).
+        titles_pdf_path     : PDF with one divider page per chapter, in chapter
+                              order — as produced by
+                              chapter_titles.generate_chapter_titles_pdf.
+        chapter_start_pages : list of 1-based content page numbers where each
+                              chapter starts, in the SAME order as the divider
+                              pages in titles_pdf_path.
+        output_path         : where to write the combined PDF.
+
+        Divider pages are inserted as-is (no header/footer) and are unnumbered,
+        so the content's footer numbers and the index page numbers are unaffected.
+        """
+        content = PdfReader(content_pdf_path)
+        titles  = PdfReader(titles_pdf_path)
+        writer  = PdfWriter()
+
+        # content start page (1-based) -> index of its divider page in titles
+        start_to_title = {sp: i for i, sp in enumerate(chapter_start_pages)}
+
+        inserted = 0
+        for i, page in enumerate(content.pages):
+            page_no = i + 1
+            if page_no in start_to_title:
+                writer.add_page(titles.pages[start_to_title[page_no]])
+                inserted += 1
+            writer.add_page(page)
+
+        with open(output_path, 'wb') as f_out:
+            writer.write(f_out)
+
+        print(f"[PDFMerger] Inserted {inserted} chapter title page(s) → {output_path}")

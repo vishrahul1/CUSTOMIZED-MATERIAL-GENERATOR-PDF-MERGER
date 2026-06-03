@@ -55,6 +55,26 @@ MARGIN_LEFT = 1457  # 2.57 cm
 MARGIN_RIGHT = 1038  # 1.83 cm
 
 
+def _collapse_consecutive_duplicates(data):
+    """Merge consecutive rows that share the same chapter AND topic name into a
+    single row, keeping the earliest (first) page number.
+
+    Two consecutive "learning goals" with the same name are shown as one entry,
+    pointing at the page where that name first starts.
+    """
+    def _norm(s):
+        return str(s).strip().casefold()
+
+    collapsed = []
+    for chapter, topic, page in data:
+        if (collapsed
+                and _norm(collapsed[-1][0]) == _norm(chapter)
+                and _norm(collapsed[-1][1]) == _norm(topic)):
+            continue  # duplicate of the previous row -> keep first page, skip
+        collapsed.append((chapter, topic, page))
+    return collapsed
+
+
 def _force_calibri_body_theme(doc):
     """The stock python-docx theme uses Cambria as the minor (body) font, so a
     theme-linked run would render as "Cambria (Body)". Repoint the theme's
@@ -265,6 +285,9 @@ def generate_index(data, output_path, title="TABLE OF CONTENTS",
     -------
     output_path
     """
+    # collapse consecutive same-name rows into one (keep first page number)
+    data = _collapse_consecutive_duplicates(data)
+
     doc = Document()
     _force_calibri_body_theme(doc)
 

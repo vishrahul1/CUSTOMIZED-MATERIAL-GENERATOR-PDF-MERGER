@@ -3,17 +3,45 @@ from modules.file_collector import FileCollector
 from modules.pdf_merger import PDFMerger
 from modules.template_updater import TemplateUpdater
 from modules.index_manager import IndexManager
+from modules.chapter_titles import generate_chapter_titles_pdf
 from pypdf import PdfReader
 import os
 
 
+def _build_chapter_list(index_data):
+    """
+    Derive the ordered chapter list from index_data.
+
+    A new chapter starts whenever chapter_name changes from the previous entry
+    (same rule spectropy_index uses to number chapters). Returns a list of dicts:
+        {'number': 1-based chapter no, 'name': chapter name,
+         'start_page': 1-based content page where the chapter begins}
+    """
+    chapters = []
+    last_name = None
+    for entry in index_data:
+        name = str(entry['chapter_name'])
+        if name != last_name:
+            last_name = name
+            chapters.append({
+                'number':     len(chapters) + 1,
+                'name':       name,
+                'start_page': entry['page_number'],
+            })
+    return chapters
+
+
 def run_main_pipeline(excel_path, source_folder, output_pdf_path,
-                      header_footer_style=None, update_status=print):
+                      header_footer_style=None, generate_old_index=False,
+                      update_status=print):
     try:
         base_output             = os.path.dirname(output_pdf_path)
         merged_pdf_path         = os.path.join(base_output, "merged_content.pdf")
         merged_with_header_path = os.path.join(base_output, "merged_with_header.pdf")
+        chapter_titles_pdf_path = os.path.join(base_output, "chapter_titles.pdf")
+        merged_with_titles_path = os.path.join(base_output, "merged_with_titles.pdf")
         final_index_pdf_path    = os.path.join(base_output, "final_index.pdf")
+        old_index_pdf_path      = os.path.join(base_output, "final_index_old.pdf")
 
         update_status("🔄 Starting PDF merge process...")
 
@@ -73,15 +101,41 @@ def run_main_pipeline(excel_path, source_folder, output_pdf_path,
             style=header_footer_style,
         )
 
-        # Step 6: Generate index PDF with ReportLab
-        update_status("📄 Generating table of contents PDF...")
-        TemplateUpdater().generate_index_pdf(index_data, final_index_pdf_path)
+        # Step 6: Generate chapter divider pages and insert each at its chapter
+        # start. Done AFTER header/footer so dividers stay clean (no header/footer)
+        # and unnumbered — content footer/index page numbers are unaffected.
+        chapters = _build_chapter_list(index_data)
+        update_status(f"📖 Generating {len(chapters)} chapter title page(s)...")
+        generate_chapter_titles_pdf(
+            [(c['number'], c['name']) for c in chapters],
+            chapter_titles_pdf_path,
+        )
+        update_status("📌 Inserting chapter title pages at chapter starts...")
+        merger.insert_chapter_title_pages(
+            merged_with_header_path,
+            chapter_titles_pdf_path,
+            [c['start_page'] for c in chapters],
+            merged_with_titles_path,
+        )
+        update_status(f"    ✓ Inserted {len(chapters)} chapter title page(s).")
 
-        # Step 7: Combine index + content
+        # Step 7: Generate index PDF (SPECTROPY format — merged into final)
+        update_status("📄 Generating table of contents PDF...")
+        updater = TemplateUpdater()
+        updater.generate_index_pdf(index_data, final_index_pdf_path)
+
+        # Optional: also generate the old ReportLab index as a separate
+        # reference file (NOT merged into the final combined PDF).
+        if generate_old_index:
+            update_status("📄 Generating old-format index PDF (reference only)...")
+            updater.generate_old_index_pdf(index_data, old_index_pdf_path)
+            update_status(f"    ✓ Old index → {old_index_pdf_path}")
+
+        # Step 8: Combine index + content (content now includes chapter dividers)
         update_status("📎 Combining index and content into final PDF...")
         IndexManager().combine_index_and_content(
             final_index_pdf_path,
-            merged_with_header_path,
+            merged_with_titles_path,
             output_pdf_path,
         )
 

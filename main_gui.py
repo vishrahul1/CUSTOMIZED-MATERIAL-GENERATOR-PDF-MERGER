@@ -1,3 +1,24 @@
+import sys
+
+# ── No-console safety ───────────────────────────────────────────────────────
+# When launched without a console (the windowed .exe, or double-clicking via
+# pythonw), Windows leaves sys.stdout / sys.stderr as None. Any print() — or a
+# library that writes to them — then crashes with
+# "'NoneType' object has no attribute 'write'". Give Python a harmless sink so
+# every print()/progress write is silently swallowed instead.
+class _NullWriter:
+    def write(self, *_args, **_kwargs):
+        pass
+
+    def flush(self):
+        pass
+
+
+if sys.stdout is None:
+    sys.stdout = _NullWriter()
+if sys.stderr is None:
+    sys.stderr = _NullWriter()
+
 import tkinter as tk
 import tkinter.font as tkFont
 from tkinter import ttk, filedialog, messagebox, colorchooser
@@ -412,6 +433,10 @@ class MergeApp:
         self.source_folder = tk.StringVar()
         self.output_pdf    = tk.StringVar()
 
+        # When checked, also generate the old ReportLab index as a separate
+        # reference file (the spectropy index is always the one merged).
+        self.generate_old_index = tk.BooleanVar(value=False)
+
         # Header style (defaults match original hardcoded values)
         self.hdr_x     = tk.IntVar(value=502)
         self.hdr_y     = tk.IntVar(value=796)
@@ -547,6 +572,17 @@ class MergeApp:
                      font=("Segoe UI", int(9 * sc)), bg=CARD).pack(
                 side="left", fill="x", expand=True, ipady=int(4 * sc))
             self._btn(row, btn, cmd).pack(side="left", padx=(int(8 * sc), 0))
+
+        # Old-index option
+        opt_row = tk.Frame(card, bg=CARD)
+        opt_row.pack(fill="x", padx=pad, pady=(int(10 * sc), 0))
+        tk.Checkbutton(
+            opt_row,
+            text="Also generate the old-format index (saved separately, not merged)",
+            variable=self.generate_old_index,
+            bg=CARD, fg=ACCENT, activebackground=CARD,
+            selectcolor=CARD, anchor="w",
+            font=("Segoe UI", int(8 * sc))).pack(side="left")
 
         # Preview button
         prev_row = tk.Frame(card, bg=CARD)
@@ -719,6 +755,7 @@ class MergeApp:
                     source_folder=self.source_folder.get(),
                     output_pdf_path=self.output_pdf.get(),
                     header_footer_style=self._get_style(),
+                    generate_old_index=self.generate_old_index.get(),
                     update_status=self.update_status,
                 )
             finally:

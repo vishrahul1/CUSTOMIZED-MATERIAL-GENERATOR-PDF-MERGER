@@ -11,10 +11,16 @@ rl_datas = collect_data_files('reportlab')
 # ── Pillow — needs its imaging plugins ───────────────────────────────────────
 pil_d, pil_b, pil_h = collect_all('PIL')
 
+# ── python-docx — ships templates/default.docx loaded at runtime ─────────────
+docx_d, docx_b, docx_h = collect_all('docx')
+
+# ── pywin32 (win32com / pythoncom) — needed by docx2pdf to drive Word COM ────
+win_d, win_b, win_h = collect_all('win32com')
+
 a = Analysis(
     ['main_gui.py'],
     pathex=[],
-    binaries=fitz_b + pymupdf_b + pil_b,
+    binaries=fitz_b + pymupdf_b + pil_b + docx_b + win_b,
     datas=[
         # Sample / template resources bundled inside the exe
         ('resources/excel.xlsx', 'resources'),
@@ -24,6 +30,8 @@ a = Analysis(
         *pymupdf_d,
         *rl_datas,
         *pil_d,
+        *docx_d,
+        *win_d,
     ],
     hiddenimports=[
         # PyMuPDF
@@ -56,6 +64,18 @@ a = Analysis(
         'reportlab.pdfbase.ttfonts',
         'reportlab.pdfbase.pdfmetrics',
 
+        # Index generation: spectropy (python-docx) + docx2pdf (Word COM)
+        'spectropy_index',
+        'docx',
+        'docx2pdf',
+        'tqdm',
+        'win32com',
+        'win32com.client',
+        'pythoncom',
+        'pywintypes',
+        *docx_h,
+        *win_h,
+
         # Utilities
         'chardet',
         'lxml',
@@ -67,8 +87,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # Packages no longer used — keep them out of the bundle
-    excludes=['docx2pdf', 'docx', 'python-docx', 'win32com'],
+    excludes=[],
     noarchive=False,
     optimize=0,
 )
@@ -81,7 +100,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='PDF Merge Dashboard v3',
+    name='PDF Merge Dashboard v5.1',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
