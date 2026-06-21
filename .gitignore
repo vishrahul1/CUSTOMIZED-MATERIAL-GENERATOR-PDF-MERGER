@@ -12,10 +12,24 @@ ENV/
 # Build and packaging output
 build/
 dist/
+output/
 
 # Logs and runtime files
 logs/
 *.log
+
+# Generated or local documentation artifacts
+CLAUDE.md
+DOCUMENTATION.docx
+FLOWCHAT.pdf
+User\ Guide\ -\ PDF\ Merge\ Dashboard.pdf
+
+# Local tool/runtime folders
+.claude/
+.venv/
+venv/
+env/
+ENV/
 
 # Test and tooling caches
 .pytest_cache/
